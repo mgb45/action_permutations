@@ -1,4 +1,4 @@
-# action_permutations
+# Action Permutations
 Predicting action sequences with visual permutations
 
 Requirements:
