@@ -22,7 +22,7 @@ from scipy.stats import kendalltau
 
 from models import Sampler, SinkhornNet
 
-# Load some data - restrict to first 150 demos
+# Load some data
 flist = sorted(glob.glob('../../demos/perms/order*'))
 
 
@@ -42,7 +42,7 @@ for f in flist:
 dataset = Sampler(np.swapaxes(np.stack(im_list),1,3),np.stack(obj_list),6)
 
 # Split into test/ train
-train_dataset,test_dataset = torch.utils.data.random_split(dataset, [100,len(im_list)-100])
+train_dataset,test_dataset = torch.utils.data.random_split(dataset, [200,len(im_list)-200])
 
 # Training data loader
 batch_size = 8

@@ -66,6 +66,8 @@ class SinkhornNet(nn.Module):
             nn.ReLU(),
             Flatten(),
             nn.Linear(256, latent_dim),
+            nn.ReLU(),
+            nn.Dropout(p=0.2)
         )
         
         # Sinkhorn params
@@ -183,6 +185,8 @@ class BCNet(nn.Module):
             nn.ReLU(),
             Flatten(),
             nn.Linear(256, latent_dim),
+            nn.ReLU(),
+            nn.Dropout(p=0.2)
         )
         
         self.latent_dim = latent_dim
@@ -286,6 +290,8 @@ class TCNNet(nn.Module):
             nn.ReLU(),
             Flatten(),
             nn.Linear(256, latent_dim*K),
+            nn.ReLU(),
+            nn.Dropout(p=0.2)
         )
         
         self.tcn = TemporalConvNet(K,[K]*K)
