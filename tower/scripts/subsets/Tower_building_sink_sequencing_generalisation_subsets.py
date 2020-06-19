@@ -21,6 +21,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from scipy.stats import kendalltau
+device = torch.device('cuda:0')
 
 # Set up pytorch dataloader
 # Set up pytorch dataloader
@@ -28,9 +29,9 @@ class Sampler(Dataset):
     
     def __init__(self, ims, actions, seq_lens, K=6):
         
-        self.ims = torch.FloatTensor(ims.astype('float'))
-        self.actions = torch.FloatTensor(actions.astype('float'))
-        self.seq_lens = torch.LongTensor(seq_lens.astype('int'))
+        self.ims = torch.FloatTensor(ims.astype('float')).to(device)
+        self.actions = torch.FloatTensor(actions.astype('float')).to(device)
+        self.seq_lens = torch.LongTensor(seq_lens.astype('int')).to(device)
         self.K = K
         
         
@@ -43,7 +44,7 @@ class Sampler(Dataset):
         im = self.ims[index,:,:,:]
         actions = self.actions[index,:]
         seq_len = self.seq_lens[index]
-        return im, actions, torch.FloatTensor(np.arange(self.K).astype('float')), seq_len
+        return im, actions, torch.FloatTensor(np.arange(self.K).astype('float')).to(device), seq_len
 
 # Define permuation prediction model
 class Flatten(nn.Module):
@@ -56,17 +57,21 @@ class SinkhornNet(nn.Module):
         super(SinkhornNet, self).__init__()
         
         self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2),
+            nn.Conv2d(3, 32, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2),
+            nn.Conv2d(32, 64, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64, 128, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128, 256, kernel_size=5),
             nn.ReLU(),
+            nn.MaxPool2d(2,2),
             Flatten(),
-            nn.Linear(256, latent_dim),
-            nn.Dropout(p=0.2),
+            nn.Linear(4096, latent_dim),
+            nn.ReLU(),
+            nn.Dropout(p=0.5)
         )
         
         # Sinkhorn params
@@ -125,7 +130,7 @@ class SinkhornNet(nn.Module):
 
         mask_loss = self.mask_criterion(stopping_bin,seq_len-1)
         
-        mask_idxs = torch.arange(0,self.K).repeat(seq_pred.size(0),1)
+        mask_idxs = torch.arange(0,self.K).repeat(seq_pred.size(0),1).to(device)
         
         seq_len_mask = seq_len.reshape(-1,1).repeat(self.n_samples,self.K)
        
@@ -145,7 +150,7 @@ class SinkhornNet(nn.Module):
         return inv_soft_perms_flat
     
     def sample_gumbel(self, shape, eps=1e-20):
-        U = torch.rand(shape).float()
+        U = torch.rand(shape).float().to(device)
         return -torch.log(eps - torch.log(U + eps))
     
     def gumbel_sinkhorn(self,log_alpha):
@@ -181,11 +186,6 @@ class SinkhornNet(nn.Module):
         log_alpha = log_alpha.view(-1, n, n)
 
         for i in range(n_iters):
-            # torch.logsumexp(input, dim, keepdim, out=None)
-            #Returns the log of summed exponentials of each row of the input tensor in the given dimension dim
-            #log_alpha -= (torch.logsumexp(log_alpha, dim=2, keepdim=True)).view(-1, n, 1)
-            #log_alpha -= (torch.logsumexp(log_alpha, dim=1, keepdim=True)).view(-1, 1, n)
-            #avoid in-place
             log_alpha = log_alpha - (torch.logsumexp(log_alpha, dim=2, keepdim=True)).view(-1, n, 1)
             log_alpha = log_alpha - (torch.logsumexp(log_alpha, dim=1, keepdim=True)).view(-1, 1, n)
         return torch.exp(log_alpha)
@@ -193,7 +193,7 @@ class SinkhornNet(nn.Module):
 
 
 # Load some data - restrict to first N demos
-flist = sorted(glob.glob('../../results/perms_subsets/order*'))
+flist = sorted(glob.glob('../../demos/perms_subsets/order*'))
 random.shuffle(flist)
 train_list = flist[0:args.demos]
 test_list = flist[args.demos:]
@@ -205,8 +205,8 @@ for i,f in enumerate(train_list):
     
     run = int(f.split('_')[2][:-4])
 
-    ims = np.load('../../results/perms_subsets/ims_%04d.npy'%run)
-    obj_ids = np.load('../../results/perms_subsets/order_%04d.npy'%run)
+    ims = np.load('../../demos/perms_subsets/ims_%04d.npy'%run)
+    obj_ids = np.load('../../demos/perms_subsets/order_%04d.npy'%run)
     
     obj_list.append(obj_ids)
     im_list.append(ims)
@@ -225,8 +225,9 @@ batch_size = 16
 train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 # Build model
-sn = SinkhornNet(latent_dim=32, image_channels=3, K=6)
-optimizer = torch.optim.Adam(sn.parameters(), lr=1e-4)
+sn = SinkhornNet(latent_dim=128, image_channels=3, K=6)
+sn.to(device)
+optimizer = torch.optim.Adam(sn.parameters(), lr=3e-4)
 
 n_epochs = 1000
 
@@ -253,19 +254,23 @@ print('Evaluating...')
 # Compare pair ranks
 tau_list = []
 Acc = []
+Precision = []
 for f in flist:
     run = int(f.split('_')[2][:-4])
-    im = np.load('../../results/perms_subsets/ims_%04d.npy'%run)
+    im = np.load('../../demos/perms_subsets/ims_%04d.npy'%run)
     im = np.swapaxes(im.reshape(1,64,64,3),1,3)
-    seq = np.load('../../results/perms_subsets/order_%04d.npy'%run)
+    seq = np.load('../../demos/perms_subsets/order_%04d.npy'%run)
 
-    P = sn.predict_P(torch.from_numpy(im).float())
-    order,stop = sn(torch.FloatTensor(np.arange(6).astype('float')),torch.from_numpy(im).float())
-    Acc.append(np.argmax(stop.detach().numpy(),1)==(seq.shape[0]-1))
-    obj_ids = np.argmax(P[0,:,:].detach().numpy(),1)
+    P = sn.predict_P(torch.from_numpy(im).float().to(device))
+    order,stop = sn(torch.FloatTensor(np.arange(6).astype('float')).to(device),torch.from_numpy(im).float().to(device))
+    Acc.append(np.argmax(stop.cpu().detach().numpy(),1)==(seq.shape[0]-1))
+    obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
 
     tau, _ = kendalltau(obj_ids[0:seq.shape[0]], seq)
     tau_list.append(tau)
+    
+    Precision.append(np.sum((obj_ids[0:seq.shape[0]]==seq))/(seq.shape[0]))
 
 np.savetxt('../../exps/perms_subsets/tau_sink_%04d.txt'%args.demos,np.array(tau_list))
+np.savetxt('../../exps/perms_subsets/Precision_sink_%04d.txt'%args.demos,np.array(Precision))
 np.savetxt('../../exps/perms_subsets/Acc_sink_%04d.txt'%args.demos,np.array(Acc))
