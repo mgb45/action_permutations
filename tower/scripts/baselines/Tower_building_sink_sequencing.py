@@ -21,6 +21,7 @@ from torch.utils.data import DataLoader
 from scipy.stats import kendalltau
 
 from models import Sampler, SinkhornNet
+device = torch.device('cuda:1')
 
 # Load some data
 flist = sorted(glob.glob('../../demos/perms/order*'))
@@ -45,15 +46,16 @@ dataset = Sampler(np.swapaxes(np.stack(im_list),1,3),np.stack(obj_list),6)
 train_dataset,test_dataset = torch.utils.data.random_split(dataset, [200,len(im_list)-200])
 
 # Training data loader
-batch_size = 8
+batch_size = 32
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 # Build model
-sn = SinkhornNet(latent_dim=16, image_channels=3, K=6)
+sn = SinkhornNet(latent_dim=128, image_channels=3, K=6)
+sn.to(device)
 optimizer = torch.optim.Adam(sn.parameters(), lr=3e-4)
 
-n_epochs = 1000
+n_epochs = 10000
 
 # Train model
 for j in range(n_epochs):
@@ -61,13 +63,15 @@ for j in range(n_epochs):
     for im, seq, seq_order in train_loader:
     
         loss, seq_pred = sn.loss(seq, im, seq_order)
-            
+        
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-
+    print("\r Epoch %d Loss: %2.2f"%(j,loss.item()),end='')
+    
 # Evaluate model
 sn.eval()
+print('Done.')
 sn.noise_factor = 0.0
 sn.n_samples = 1
 
@@ -75,8 +79,8 @@ sn.n_samples = 1
 tau_list = []
 for im,seq,seq_ordered in test_loader:
     P = sn.predict_P(im)
-    obj_ids = np.round(np.matmul(np.linalg.inv(P[0,:,:].detach().numpy()),seq_ordered[0,:].numpy())).astype(int)
-    tau, _ = kendalltau(obj_ids, seq[0,:].numpy())
+    obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
+    tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list.append(tau)
 
 np.savetxt('../../exps/perms/tau_sink_%02d.txt'%args.seed,np.array(tau_list))

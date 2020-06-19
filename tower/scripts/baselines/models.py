@@ -4,14 +4,15 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from torch.nn.utils import weight_norm
+device = torch.device('cuda:1')
 
 # Set up pytorch dataloader
 class SamplerBC(Dataset):
     
     def __init__(self, ims, actions):
         
-        self.ims = torch.FloatTensor(ims.astype('float'))
-        self.actions = torch.LongTensor(actions.astype('int'))
+        self.ims = torch.FloatTensor(ims.astype('float')).to(device)
+        self.actions = torch.LongTensor(actions.astype('int')).to(device)
         
         
     def __len__(self):
@@ -30,8 +31,8 @@ class Sampler(Dataset):
     
     def __init__(self, ims, actions,K=6):
         
-        self.ims = torch.FloatTensor(ims.astype('float'))
-        self.actions = torch.FloatTensor(actions.astype('float'))
+        self.ims = torch.FloatTensor(ims.astype('float')).to(device)
+        self.actions = torch.FloatTensor(actions.astype('float')).to(device)
         self.K = K
         
         
@@ -43,31 +44,34 @@ class Sampler(Dataset):
         
         im = self.ims[index,:,:,:]
         actions = self.actions[index,:]
-        return im, actions, torch.FloatTensor(np.arange(self.K).astype('float'))
+        return im, actions, torch.FloatTensor(np.arange(self.K).astype('float')).to(device)
 
 # Define permuation prediction model
 class Flatten(nn.Module):
     def forward(self, input):
         return input.view(input.size(0), -1)
-    
+     
 class SinkhornNet(nn.Module):
 
     def __init__(self, latent_dim=16, image_channels=3, K=6, n_samples=5, noise_factor=1.0, temp=1.0, n_iters=20):
         super(SinkhornNet, self).__init__()
         
         self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2),
+            nn.Conv2d(3, 32, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2),
+            nn.Conv2d(32, 64, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64, 128, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128, 256, kernel_size=5),
             nn.ReLU(),
+            nn.MaxPool2d(2,2),
             Flatten(),
-            nn.Linear(256, latent_dim),
+            nn.Linear(4096, latent_dim),
             nn.ReLU(),
-            nn.Dropout(p=0.2)
+            nn.Dropout(p=0.5)
         )
         
         # Sinkhorn params
@@ -80,8 +84,9 @@ class SinkhornNet(nn.Module):
         
         self.criterion = nn.MSELoss()
 
-        self.sinknet = nn.Sequential(
-                        nn.Linear(self.latent_dim, K*K))
+        self.sinknet = nn.Sequential(nn.Linear(self.latent_dim, self.latent_dim),
+                                     nn.ReLU(),
+                                     nn.Linear(self.latent_dim, K*K))
     
     def permute(self,seq,P):
         
@@ -110,15 +115,19 @@ class SinkhornNet(nn.Module):
         
         seq_tiled = seq.repeat(self.n_samples, 1)
         ordered  = self.permute(torch.unsqueeze(seq_tiled,dim=-1),P)
-        
+
+         
         return ordered
     
     def loss(self, seq, im, seq_gt):
         
-        seq_pred = torch.squeeze(self.forward(seq,im))
-        seq_gt = seq_gt.repeat(self.n_samples, 1)
+        seq_pred = self.forward(seq_gt,im)
+        seq_pred = torch.squeeze(seq_pred)
 
-        return self.criterion(seq_pred,seq_gt), seq_pred
+       
+        recon_loss = self.criterion(seq_pred,seq.repeat(self.n_samples, 1))
+        
+        return recon_loss, seq_pred
     
     def inv_soft_pers_flattened(self,soft_perms_inf,n_numbers):
         inv_soft_perms = torch.transpose(soft_perms_inf, 2, 3)
@@ -128,7 +137,7 @@ class SinkhornNet(nn.Module):
         return inv_soft_perms_flat
     
     def sample_gumbel(self, shape, eps=1e-20):
-        U = torch.rand(shape).float()
+        U = torch.rand(shape).float().to(device)
         return -torch.log(eps - torch.log(U + eps))
     
     def gumbel_sinkhorn(self,log_alpha):
@@ -168,25 +177,27 @@ class SinkhornNet(nn.Module):
             log_alpha = log_alpha - (torch.logsumexp(log_alpha, dim=1, keepdim=True)).view(-1, 1, n)
         return torch.exp(log_alpha)
 
-
 class BCNet(nn.Module):
 
     def __init__(self, latent_dim=16, image_channels=3, K=6):
         super(BCNet, self).__init__()
         
         self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2),
+            nn.Conv2d(3, 32, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2),
+            nn.Conv2d(32, 64, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64, 128, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128, 256, kernel_size=5),
             nn.ReLU(),
+            nn.MaxPool2d(2,2),
             Flatten(),
-            nn.Linear(256, latent_dim),
+            nn.Linear(4096, latent_dim),
             nn.ReLU(),
-            nn.Dropout(p=0.2)
+            nn.Dropout(p=0.5)
         )
         
         self.latent_dim = latent_dim
@@ -194,7 +205,8 @@ class BCNet(nn.Module):
         
         self.criterion = nn.CrossEntropyLoss()
 
-        self.fc = nn.Sequential(
+        self.fc = nn.Sequential(nn.Linear(self.latent_dim, self.latent_dim),
+                                nn.ReLU(),
                         nn.Linear(self.latent_dim, K*K))
     
     def forward(self, im):
@@ -208,9 +220,9 @@ class BCNet(nn.Module):
     def loss(self, seq, im):
         
         seq_logits = self.forward(im)
-        
-        return self.criterion(seq_logits,seq), seq_logits
-
+    
+        return self.criterion(seq_logits.view(-1,self.K),seq.view(-1)), seq_logits
+    
 class Chomp1d(nn.Module):
     def __init__(self, chomp_size):
         super(Chomp1d, self).__init__()
@@ -262,36 +274,34 @@ class TemporalConvNet(nn.Module):
             dilation_size = 2 ** i
             in_channels = num_inputs if i == 0 else num_channels[i-1]
             out_channels = num_channels[i]
-            layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
-                                     padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+            layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size, padding=(kernel_size-1) * dilation_size, dropout=dropout)]
 
         self.network = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.network(x)
 
-class Flatten(nn.Module):
-    def forward(self, input):
-        return input.view(input.size(0), -1)
-    
 class TCNNet(nn.Module):
 
     def __init__(self, latent_dim=16, image_channels=3, K=6):
         super(TCNNet, self).__init__()
         
         self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2),
+            nn.Conv2d(3, 32, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2),
+            nn.Conv2d(32, 64, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64, 128, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128, 256, kernel_size=5),
             nn.ReLU(),
+            nn.MaxPool2d(2,2),
             Flatten(),
-            nn.Linear(256, latent_dim*K),
+            nn.Linear(4096, latent_dim*K),
             nn.ReLU(),
-            nn.Dropout(p=0.2)
+            nn.Dropout(p=0.5)
         )
         
         self.tcn = TemporalConvNet(K,[K]*K)
@@ -320,4 +330,4 @@ class TCNNet(nn.Module):
         
         seq_logits = self.forward(im)
 
-        return self.criterion(seq_logits,seq), seq_logits
+        return self.criterion(seq_logits.view(-1,self.K),seq.view(-1)), seq_logits

@@ -19,6 +19,7 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from scipy.stats import kendalltau
 from scipy.optimize import linear_sum_assignment
+device = torch.device('cuda:1')
 
 from models import SamplerBC, TCNNet
 
@@ -44,15 +45,16 @@ dataset = SamplerBC(np.swapaxes(np.stack(im_list),1,3),np.stack(obj_list))
 train_dataset,test_dataset = torch.utils.data.random_split(dataset, [200,len(im_list)-200])
 
 # Training data loader
-batch_size = 8
+batch_size = 32
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
 # Build model
-bc = TCNNet(latent_dim=16, image_channels=3, K=6)
-optimizer = torch.optim.Adam(bc.parameters(), lr=1e-4)
+bc = TCNNet(latent_dim=128, image_channels=3, K=6)
+bc.to(device)
+optimizer = torch.optim.Adam(bc.parameters(), lr=3e-4)
 
-n_epochs = 1000
+n_epochs = 2000
 
 for j in range(n_epochs):
     
@@ -61,20 +63,21 @@ for j in range(n_epochs):
         loss, seq_pred = bc.loss(seq, im)       
      
         loss.backward()
+        
         optimizer.step()
         optimizer.zero_grad()
-        
+    print("\r Epoch %d Loss: %2.2f"%(j,loss.item()),end='')   
 # Evaluate model
 bc.eval()
-
+print('Done.')
 
 # Compare ranks
 tau_list = []
 for im,seq in test_loader:
     seq_pred = bc(im)
-    obj_ids = np.round(np.matmul(seq_pred[0,:,:].detach().numpy(),np.arange(6))).astype(int)
+    obj_ids = np.round(np.matmul(seq_pred[0,:,:].cpu().detach().numpy(),np.arange(6))).astype(int)
     #obj_ids = np.argmax(seq_pred[0,:,:].detach().numpy(),-1)
-    tau, _ = kendalltau(obj_ids, seq[0,:].numpy())
+    tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list.append(tau)
 
 
@@ -82,9 +85,9 @@ for im,seq in test_loader:
 tau_list_hung = []
 for im,seq in test_loader:
     seq_pred = bc(im)
-    _,obj_ids = linear_sum_assignment(1.0-seq_pred[0,:,:].detach().numpy())
+    _,obj_ids = linear_sum_assignment(1.0-seq_pred[0,:,:].cpu().detach().numpy())
     #obj_ids = np.argmax(seq_pred[0,:,:].detach().numpy(),-1)
-    tau, _ = kendalltau(obj_ids, seq[0,:].numpy())
+    tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list_hung.append(tau)
 
 np.savetxt('../../exps/perms/tau_tcn_%02d.txt'%args.seed,np.array(tau_list))
