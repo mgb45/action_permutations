@@ -52,18 +52,21 @@ class SinkhornNet(nn.Module):
         super(SinkhornNet, self).__init__()
         
         self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=5, stride=2),
+            nn.Conv2d(3, 32, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=5, stride=2),
+            nn.Conv2d(32, 64, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(64, 128, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64, 128, kernel_size=5),
             nn.ReLU(),
-            nn.Conv2d(128, 256, kernel_size=5, stride=2),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128, 256, kernel_size=5),
             nn.ReLU(),
+            nn.MaxPool2d(2,2),
             Flatten(),
-            nn.Linear(256, latent_dim),
+            nn.Linear(4096, latent_dim),
             nn.ReLU(),
-            nn.Dropout(p=0.1)
+            nn.Dropout(p=0.5)
         )
         
         # Sinkhorn params
@@ -192,8 +195,8 @@ batch_size = 16
 train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 # Build model
-sn = SinkhornNet(latent_dim=32, image_channels=3, K=6)
-optimizer = torch.optim.Adam(sn.parameters(), lr=1e-4)
+sn = SinkhornNet(latent_dim=128, image_channels=3, K=6)
+optimizer = torch.optim.Adam(sn.parameters(), lr=3e-4)
 
 n_epochs = 1000
 
@@ -218,6 +221,7 @@ print('Evaluating...')
 # Compare pair ranks
 tau_list = []
 acc_list = []
+precision = []
 for f in flist:
     run = int(f.split('_')[2][:-4])
     im = np.load('../../demos/perms_unique/ims_%04d.npy'%run)
@@ -229,6 +233,8 @@ for f in flist:
     tau, _ = kendalltau(obj_ids, seq)
     tau_list.append(tau)
     acc_list.append(np.array_equal(obj_ids,seq))
+    precision.append(np.sum((obj_ids==seq))/(seq.shape[0]))
 
 np.savetxt('../../exps/perms_unique/tau_sink_%04d.txt'%args.demos,np.array(tau_list))
 np.savetxt('../../exps/perms_unique/acc_sink_%04d.txt'%args.demos,np.array(acc_list))
+np.savetxt('../../exps/perms_subsets/precision_sink_%04d.txt'%args.demos,np.array(precision))
