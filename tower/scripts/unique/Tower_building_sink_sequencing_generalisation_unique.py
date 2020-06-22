@@ -237,4 +237,4 @@ for f in flist:
 
 np.savetxt('../../exps/perms_unique/tau_sink_%04d.txt'%args.demos,np.array(tau_list))
 np.savetxt('../../exps/perms_unique/acc_sink_%04d.txt'%args.demos,np.array(acc_list))
-np.savetxt('../../exps/perms_subsets/precision_sink_%04d.txt'%args.demos,np.array(precision))
+np.savetxt('../../exps/perms_unique/precision_sink_%04d.txt'%args.demos,np.array(precision))

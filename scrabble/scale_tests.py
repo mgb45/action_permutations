@@ -18,15 +18,15 @@ device = torch.device('cuda:0')
 
 from model import Sampler, SinkhornNet
 
-batch_size = 32
+batch_size = 64
 latent_dim = 512
 learning_rate = 3e-4
-n_epochs = 1000
+n_epochs = 500
 max_actions = 98
 min_actions = 6
 action_step = 5
 noise = 1.0
-temp = 1.5
+temp = 1.0
 K = 6
 
 for numActions in list(range(min_actions,max_actions,action_step)):
@@ -34,18 +34,14 @@ for numActions in list(range(min_actions,max_actions,action_step)):
     print('\nTesting for %d actions:'%numActions)
     train_actions = np.load('./data/actions_%02d.npy'%numActions,allow_pickle=True)
     train_ims = np.load('./data/word_pics_%02d.npy'%numActions)
-
-    # Build masked input matrix
-#     act_idxs = np.ones((len(train_actions),numActions))*100
-#     seq_len = []
-#     for j,act_idx in enumerate(train_actions):
-#         seq_len.append(act_idx.shape[0]-1)
-#         act_idxs[j,0:act_idx.shape[0]] = act_idx
-        
-    a_one_hot = np.zeros((actions.shape[0],K,numActions))
-    for i,a in enumerate(actions):
-        oh = np.zeros((actions.shape[1],K))
-        oh[np.arange(actions.shape[1]),a] = 1
+ 
+    K = 6
+    a_one_hot = np.zeros((train_actions.shape[0],numActions,numActions))
+    seq_len = []
+    for i,a in enumerate(train_actions):
+        seq_len.append(a.shape[0]-1)
+        oh = np.zeros((numActions,numActions))
+        oh[np.arange(a.shape[0]),a] = 1
         a_one_hot[i,:,:] = oh
 
     # Create test train dataset
@@ -59,7 +55,6 @@ for numActions in list(range(min_actions,max_actions,action_step)):
     sn.to(device)
     optimizer = torch.optim.Adam(sn.parameters(), lr=learning_rate)
 
-    pre_loss = 0
     for j in range(n_epochs):
 
         batch_losses = []
@@ -75,11 +70,9 @@ for numActions in list(range(min_actions,max_actions,action_step)):
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
+        
         print('\rEpoch %d. Loss recon %4.2f, Loss mask  %2.2f.'%(j,np.mean(batch_losses),np.mean(batch_losses_m)),end='')
-        delta_loss = np.abs((np.mean(batch_losses)+np.mean(batch_losses_m)) - pre_loss)
-        pre_loss = (np.mean(batch_losses)+np.mean(batch_losses_m))
-        if delta_loss < 0.001:
-            break;
+
 
     # Evaluate model
     sn.eval()
@@ -87,14 +80,20 @@ for numActions in list(range(min_actions,max_actions,action_step)):
     sn.n_samples = 1
 
     tau_list = []
-    Acc = []
+    acc = []
+    precision = []
     for im,seq,seq_ordered,seq_len in test_loader:
         P = sn.predict_P(im)
         order,stop = sn(seq_ordered,im)
-        Acc.append(np.argmax(stop.cpu().detach().numpy(),1)==(seq_len.cpu().numpy()))
+        acc.append(np.argmax(stop.cpu().detach().numpy(),1)==(seq_len.cpu().numpy()))
         obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
-        tau, _ = kendalltau(obj_ids[0:(seq_len.cpu().numpy()[0]+1)], seq[0,0:(seq_len.cpu().numpy()[0]+1)].cpu().numpy())
+        gt = np.argmax(seq[0,0:(seq_len.cpu().numpy()[0]+1)].cpu().numpy(),1)
+        tau, _ = kendalltau(obj_ids[0:(seq_len.cpu().numpy()[0]+1)],gt)
         tau_list.append(tau)
 
+        precision.append(np.sum((obj_ids[0:(seq_len.cpu().numpy()[0]+1)]==gt))/(seq_len.cpu().numpy()[0]+1))
+
+
     np.save('./data/ntau_%02d.npy'%numActions,np.vstack(tau_list))
-    np.save('./data/nacc_%02d.npy'%numActions,np.vstack(Acc))
+    np.save('./data/nacc_%02d.npy'%numActions,np.vstack(acc))
+    np.save('./data/nprec_%02d.npy'%numActions,np.vstack(precision))

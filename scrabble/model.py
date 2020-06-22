@@ -25,7 +25,7 @@ class Sampler(Dataset):
     
     def __getitem__(self, index):
         
-        im = self.ims[index,:,:,:]/255.0
+        im = self.ims[index,:,:,:]/255.0 -0.5
         actions = self.actions[index,:,:]
         seq_len = self.seq_lens[index]
         return im, actions, torch.eye(self.K).to(device), seq_len
@@ -133,7 +133,7 @@ class SinkhornNet(nn.Module):
         
        
        
-        stopping_mask = (mask_idxs<seq_len_mask).int().float()
+        stopping_mask = (mask_idxs<=seq_len_mask).int().float()
        
         recon_loss = self.criterion(seq_pred*stopping_mask,seq.repeat(self.n_samples, 1,1)*stopping_mask)
         
