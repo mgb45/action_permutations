@@ -7,15 +7,17 @@ np.random.seed(0)
 import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-device = torch.device('cuda:0')
+import torchvision.models as models
+
+device = torch.device('cuda:1')
 # Set up pytorch dataloader
 class Sampler(Dataset):
     
     def __init__(self, ims, actions, seq_lens, K=6):
         
-        self.ims = torch.FloatTensor(ims.astype('float')).to(device)
-        self.actions = torch.FloatTensor(actions.astype('float')).to(device)
-        self.seq_lens = torch.LongTensor(seq_lens.astype('int')).to(device)
+        self.ims = torch.FloatTensor(ims.astype('float'))
+        self.actions = torch.FloatTensor(actions.astype('float'))
+        self.seq_lens = torch.LongTensor(seq_lens.astype('int'))
         self.K = K
         
         
@@ -28,7 +30,7 @@ class Sampler(Dataset):
         im = self.ims[index,:,:,:]/255.0 -0.5
         actions = self.actions[index,:,:]
         seq_len = self.seq_lens[index]
-        return im, actions, torch.eye(self.K).to(device), seq_len
+        return im.to(device), actions.to(device), torch.eye(self.K).to(device), seq_len.to(device)
 
 class Flatten(nn.Module):
     def forward(self, input):
@@ -39,22 +41,29 @@ class SinkhornNet(nn.Module):
     def __init__(self, latent_dim=16, image_channels=3, K=6, max_K=6, n_samples=5, noise_factor=1.0, temp=1.0, n_iters=5):
         super(SinkhornNet, self).__init__()
         
-        self.encoder = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=(3,3)),
-            nn.ReLU(),
-            nn.Conv2d(32, 64, kernel_size=(3,3)),
-            nn.ReLU(),
-            nn.MaxPool2d(2,2),
-            nn.Conv2d(64, 128, kernel_size=(3,3)),
-            nn.ReLU(),
-            nn.MaxPool2d(2,2),
-            nn.Conv2d(128, 256, kernel_size=(3,3)),
-            nn.ReLU(),
-            Flatten(),
-            nn.Linear(6656, latent_dim),
-            nn.ReLU(),
-            nn.Dropout(p=0.5)
-        )
+#         self.encoder = nn.Sequential(
+#             nn.Conv2d(3, 32, kernel_size=(3,3)),
+#             nn.ReLU(),
+#             nn.Conv2d(32, 64, kernel_size=(3,3)),
+#             nn.ReLU(),
+#             nn.MaxPool2d(2,2),
+#             nn.Conv2d(64, 128, kernel_size=(3,3)),
+#             nn.ReLU(),
+#             nn.MaxPool2d(2,2),
+#             nn.Conv2d(128, 256, kernel_size=(3,3)),
+#             nn.ReLU(),
+#             Flatten(),
+#             nn.Linear(6656, latent_dim),
+#             nn.ReLU(),
+#             nn.Dropout(p=0.5)
+#         )
+
+
+
+        model = models.resnet18(pretrained=False)
+        model.fc = nn.Linear(512, latent_dim)
+        
+        self.encoder = model
         
         # Sinkhorn params
         self.latent_dim = latent_dim

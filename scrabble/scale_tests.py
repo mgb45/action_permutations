@@ -14,14 +14,14 @@ torch.manual_seed(0)
 import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-device = torch.device('cuda:0')
+device = torch.device('cuda:1')
 
 from model import Sampler, SinkhornNet
 
 batch_size = 64
-latent_dim = 512
-learning_rate = 3e-4
-n_epochs = 500
+latent_dim = 128
+learning_rate = 1e-4
+n_epochs = 5000
 max_actions = 98
 min_actions = 6
 action_step = 5
@@ -82,18 +82,34 @@ for numActions in list(range(min_actions,max_actions,action_step)):
     tau_list = []
     acc = []
     precision = []
+    obj_list = []
+    spelling_precision = []
+    
+    action_set = np.load('./action_set.npy')
+    
     for im,seq,seq_ordered,seq_len in test_loader:
+        
         P = sn.predict_P(im)
+        
         order,stop = sn(seq_ordered,im)
-        acc.append(np.argmax(stop.cpu().detach().numpy(),1)==(seq_len.cpu().numpy()))
-        obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
-        gt = np.argmax(seq[0,0:(seq_len.cpu().numpy()[0]+1)].cpu().numpy(),1)
-        tau, _ = kendalltau(obj_ids[0:(seq_len.cpu().numpy()[0]+1)],gt)
+        
+        l = (seq_len.cpu().numpy()[0]+1)
+        stop_bin = np.argmax(stop.cpu().detach().numpy(),1)
+        
+        acc.append(stop_bin==(l-1))
+        
+        obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)[:l]
+        gt = np.argmax(seq[0,:l].cpu().numpy(),1)
+        
+        tau, _ = kendalltau(obj_ids,gt)
         tau_list.append(tau)
 
-        precision.append(np.sum((obj_ids[0:(seq_len.cpu().numpy()[0]+1)]==gt))/(seq_len.cpu().numpy()[0]+1))
-
+        precision.append(np.sum(obj_ids==gt)/l)
+        spelling_precision.append(np.sum(action_set[obj_ids]==action_set[gt])/l)
+        
+    np.save('./data/obj_list_%02d.npy'%numActions,obj_list)
 
     np.save('./data/ntau_%02d.npy'%numActions,np.vstack(tau_list))
     np.save('./data/nacc_%02d.npy'%numActions,np.vstack(acc))
     np.save('./data/nprec_%02d.npy'%numActions,np.vstack(precision))
+    np.save('./data/nsprec_%02d.npy'%numActions,np.vstack(spelling_precision))

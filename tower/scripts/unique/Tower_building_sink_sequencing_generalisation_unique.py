@@ -20,14 +20,15 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from scipy.stats import kendalltau
+device = torch.device('cuda:0')
 
 # Set up pytorch dataloader
 class Sampler(Dataset):
     
     def __init__(self, ims, actions,K=6):
         
-        self.ims = torch.FloatTensor(ims.astype('float'))
-        self.actions = torch.FloatTensor(actions.astype('float'))
+        self.ims = torch.FloatTensor(ims.astype('float')).to(device)
+        self.actions = torch.FloatTensor(actions.astype('float')).to(device)
         self.K = K
         
         
@@ -39,7 +40,7 @@ class Sampler(Dataset):
         
         im = self.ims[index,:,:,:]
         actions = self.actions[index,:]
-        return im, actions, torch.FloatTensor(np.arange(self.K).astype('float'))
+        return im, actions, torch.FloatTensor(np.arange(self.K).astype('float')).to(device)
 
 # Define permuation prediction model
 class Flatten(nn.Module):
@@ -79,8 +80,7 @@ class SinkhornNet(nn.Module):
         
         self.criterion = nn.MSELoss()
 
-        self.sinknet = nn.Sequential(
-                        nn.Linear(self.latent_dim, K*K))
+        self.sinknet = nn.Sequential(nn.Linear(self.latent_dim, K*K))
     
     def permute(self,seq,P):
         
@@ -114,10 +114,10 @@ class SinkhornNet(nn.Module):
     
     def loss(self, seq, im, seq_gt):
         
-        seq_pred = torch.squeeze(self.forward(seq,im))
-        seq_gt = seq_gt.repeat(self.n_samples, 1)
+        seq_pred = torch.squeeze(self.forward(seq_gt,im))
+        seq = seq.repeat(self.n_samples, 1)
 
-        return self.criterion(seq_pred,seq_gt), seq_pred
+        return self.criterion(seq_pred,seq), seq_pred
     
     def inv_soft_pers_flattened(self,soft_perms_inf,n_numbers):
         inv_soft_perms = torch.transpose(soft_perms_inf, 2, 3)
@@ -127,7 +127,7 @@ class SinkhornNet(nn.Module):
         return inv_soft_perms_flat
     
     def sample_gumbel(self, shape, eps=1e-20):
-        U = torch.rand(shape).float()
+        U = torch.rand(shape).float().to(device)
         return -torch.log(eps - torch.log(U + eps))
     
     def gumbel_sinkhorn(self,log_alpha):
@@ -195,14 +195,21 @@ batch_size = 16
 train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
 # Build model
-sn = SinkhornNet(latent_dim=128, image_channels=3, K=6)
+sn = SinkhornNet(latent_dim=1024, image_channels=3, K=6)
+sn.to(device)
 optimizer = torch.optim.Adam(sn.parameters(), lr=3e-4)
 
-n_epochs = 1000
+n_epochs = 10000
+
+
+def count_parameters(model):
+    return sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+print('Training model with %d parameters'%count_parameters(sn))
 
 # Train model
 for j in range(n_epochs):
-    
+    losses = []
     for im, seq, seq_order in train_loader:
     
         loss, seq_pred = sn.loss(seq, im, seq_order)
@@ -210,7 +217,8 @@ for j in range(n_epochs):
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
-    print("\r Epoch %d Loss: %2.2f"%(j,loss.item()),end=" ")
+        losses.append(loss.item())
+    print("\r Epoch %d Loss: %2.2f"%(j,np.mean(losses)),end=" ")
 
 # Evaluate model
 sn.eval()
@@ -228,8 +236,8 @@ for f in flist:
     im = np.swapaxes(im.reshape(1,64,64,3),1,3)
     seq = np.load('../../demos/perms_unique/order_%04d.npy'%run)
 
-    P = sn.predict_P(torch.from_numpy(im).float())
-    obj_ids = np.round(np.matmul(np.linalg.inv(P[0,:,:].detach().numpy()),np.arange(6))).astype(int)
+    P = sn.predict_P(torch.from_numpy(im).float().to(device)).cpu()
+    obj_ids = np.argmax(P[0,:,:].detach().numpy(),-1)
     tau, _ = kendalltau(obj_ids, seq)
     tau_list.append(tau)
     acc_list.append(np.array_equal(obj_ids,seq))

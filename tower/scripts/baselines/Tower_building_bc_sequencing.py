@@ -73,22 +73,31 @@ print('Done.')
 
 # Compare ranks
 tau_list = []
+obj_list = []
+gt = []
 for im,seq in test_loader:
     seq_pred = bc(im)
     obj_ids = np.round(np.matmul(seq_pred[0,:,:].cpu().detach().numpy(),np.arange(6))).astype(int)
     #obj_ids = np.argmax(seq_pred[0,:,:].detach().numpy(),-1)
     tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list.append(tau)
-
+    obj_list.append(obj_ids)
+    gt.append(seq[0,:].cpu().numpy())
+np.savetxt('../../exps/perms/actions_bc_%02d.txt'%args.seed,np.array(obj_list))
+np.savetxt('../../exps/perms/gt_actions_bc_%02d.txt'%args.seed,np.array(gt))
 
 # Constrain using Hungarian algorithm
 tau_list_hung = []
+obj_list = []
 for im,seq in test_loader:
     seq_pred = bc(im)
     _,obj_ids = linear_sum_assignment(1.0-seq_pred[0,:,:].cpu().detach().numpy())
     #obj_ids = np.argmax(seq_pred[0,:,:].detach().numpy(),-1)
     tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list_hung.append(tau)
+    obj_list.append(obj_ids)
+    
+np.savetxt('../../exps/perms/actions_bc_hung_%02d.txt'%args.seed,np.array(obj_list))
 
 np.savetxt('../../exps/perms/tau_bc_%02d.txt'%args.seed,np.array(tau_list))
 np.savetxt('../../exps/perms/tau_bc_hung%02d.txt'%args.seed,np.array(tau_list_hung))

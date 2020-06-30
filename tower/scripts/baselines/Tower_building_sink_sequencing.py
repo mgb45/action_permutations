@@ -77,10 +77,16 @@ sn.n_samples = 1
 
 # Compare pair ranks
 tau_list = []
+obj_list = []
+gt = []
 for im,seq,seq_ordered in test_loader:
     P = sn.predict_P(im)
     obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
     tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list.append(tau)
-
+    obj_list.append(obj_ids)
+    gt.append(seq[0,:].cpu().numpy())
+    
+np.savetxt('../../exps/perms/actions_sink_%02d.txt'%args.seed,np.array(obj_list))
+np.savetxt('../../exps/perms/gt_actions_sink_%02d.txt'%args.seed,np.array(gt))
 np.savetxt('../../exps/perms/tau_sink_%02d.txt'%args.seed,np.array(tau_list))
