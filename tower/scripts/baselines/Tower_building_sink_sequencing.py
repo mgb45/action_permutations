@@ -19,6 +19,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 from scipy.stats import kendalltau
+from scipy.optimize import linear_sum_assignment
 
 from models import Sampler, SinkhornNet
 device = torch.device('cuda:1')
@@ -81,7 +82,7 @@ obj_list = []
 gt = []
 for im,seq,seq_ordered in test_loader:
     P = sn.predict_P(im)
-    obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
+    _,obj_ids = linear_sum_assignment(1-P[0,:,:].cpu().detach().numpy())
     tau, _ = kendalltau(obj_ids, seq[0,:].cpu().numpy())
     tau_list.append(tau)
     obj_list.append(obj_ids)

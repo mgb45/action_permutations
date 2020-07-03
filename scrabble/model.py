@@ -41,29 +41,29 @@ class SinkhornNet(nn.Module):
     def __init__(self, latent_dim=16, image_channels=3, K=6, max_K=6, n_samples=5, noise_factor=1.0, temp=1.0, n_iters=5):
         super(SinkhornNet, self).__init__()
         
-#         self.encoder = nn.Sequential(
-#             nn.Conv2d(3, 32, kernel_size=(3,3)),
-#             nn.ReLU(),
-#             nn.Conv2d(32, 64, kernel_size=(3,3)),
-#             nn.ReLU(),
-#             nn.MaxPool2d(2,2),
-#             nn.Conv2d(64, 128, kernel_size=(3,3)),
-#             nn.ReLU(),
-#             nn.MaxPool2d(2,2),
-#             nn.Conv2d(128, 256, kernel_size=(3,3)),
-#             nn.ReLU(),
-#             Flatten(),
-#             nn.Linear(6656, latent_dim),
-#             nn.ReLU(),
-#             nn.Dropout(p=0.5)
-#         )
+        self.encoder = nn.Sequential(
+            nn.Conv2d(3, 32, kernel_size=(3,3)),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=(3,3)),
+            nn.ReLU(),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(64, 128, kernel_size=(3,3)),
+            nn.ReLU(),
+            nn.MaxPool2d(2,2),
+            nn.Conv2d(128, 256, kernel_size=(3,3)),
+            nn.ReLU(),
+            Flatten(),
+            nn.Linear(6656, latent_dim),
+            nn.ReLU(),
+            nn.Dropout(p=0.5)
+        )
 
 
 
-        model = models.resnet18(pretrained=False)
-        model.fc = nn.Linear(512, latent_dim)
+        #model = models.resnet18(pretrained=False)
+#         model.fc = nn.Linear(512, latent_dim)
         
-        self.encoder = model
+#         self.encoder = model
         
         # Sinkhorn params
         self.latent_dim = latent_dim
@@ -77,16 +77,9 @@ class SinkhornNet(nn.Module):
         self.criterion = nn.MSELoss(reduction='none')
         self.mask_criterion = nn.CrossEntropyLoss()
 
-        self.sinknet = nn.Sequential(nn.Linear(self.latent_dim, self.latent_dim),
-                                     nn.ReLU(),
-                                     nn.Linear(self.latent_dim, self.latent_dim),
-                                     nn.ReLU(),
-                                     nn.Linear(self.latent_dim, K*K))
+        self.sinknet = nn.Sequential(nn.Linear(self.latent_dim, K*K))
         
-        self.masknet = nn.Sequential(
-                        nn.Linear(self.latent_dim, self.latent_dim),
-                        nn.ReLU(),
-                        nn.Linear(self.latent_dim, self.max_K),nn.Softmax(dim=1))
+        self.masknet = nn.Sequential(nn.Linear(self.latent_dim, self.max_K),nn.Softmax(dim=1))
     
     def permute(self,seq,P):
         

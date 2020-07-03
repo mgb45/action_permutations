@@ -8,7 +8,7 @@ args = parser.parse_args()
 import numpy as np
 np.random.seed(args.seed)
 from matplotlib import pyplot as plt
-from IPython import display
+
 import torch
 import torch.nn as nn
 torch.manual_seed(args.seed)
@@ -21,9 +21,9 @@ device = torch.device('cuda:0')
 
 key = {'Orange':0,'Green':1,'Black':2,'Purple':3,'White':4,'LBlue':5,'Blue':6}
 
-extraction_orders = np.genfromtxt('./extraction_order.txt',delimiter=',',dtype=str)
+extraction_orders = np.genfromtxt('../data/extraction_order.txt',delimiter=',',dtype=str)
 
-images = np.load('cube_ims.npy')
+images = np.load('../data/cube_ims.npy')
 print (images.shape)
 
 actions = np.vectorize(key.get)(extraction_orders)
@@ -59,7 +59,7 @@ class Sampler(Dataset):
 
 dataset = Sampler(np.swapaxes(np.stack(images),2,4),actions,7)
 
-train_dataset,test_dataset = torch.utils.data.random_split(dataset, [180,60])
+train_dataset,test_dataset = torch.utils.data.random_split(dataset, [120,120])
 
 batch_size = 32
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
@@ -183,7 +183,7 @@ optimizer = torch.optim.Adam(bc.parameters(), lr=1e-4)
 n_epochs = 5000
 losses = []
 
-plt.figure(figsize=(15,7))
+
 
 for j in range(n_epochs):
     
