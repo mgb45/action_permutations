@@ -177,10 +177,10 @@ class TCNNet(nn.Module):
 
         return self.criterion(seq_logits.view(-1,self.K),seq.view(-1)), seq_logits
 
-bc = TCNNet(latent_dim=1024, image_channels=12, K=7)
+bc = TCNNet(latent_dim=128, image_channels=12, K=7)
 bc.to(device)
-optimizer = torch.optim.Adam(bc.parameters(), lr=1e-4)
-n_epochs = 5000
+optimizer = torch.optim.Adam(bc.parameters(), lr=3e-4)
+n_epochs = 1500
 losses = []
 
 

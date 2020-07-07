@@ -227,8 +227,7 @@ sn.n_samples = 1
 
 print('Evaluating...')
 # Compare pair ranks
-tau_list = []
-acc_list = []
+
 precision = []
 for f in flist:
     run = int(f.split('_')[2][:-4])
@@ -238,11 +237,7 @@ for f in flist:
 
     P = sn.predict_P(torch.from_numpy(im).float().to(device)).cpu()
     obj_ids = np.argmax(P[0,:,:].detach().numpy(),-1)
-    tau, _ = kendalltau(obj_ids, seq)
-    tau_list.append(tau)
-    acc_list.append(np.array_equal(obj_ids,seq))
+
     precision.append(np.sum((obj_ids==seq))/(seq.shape[0]))
 
-np.savetxt('../../exps/perms_unique/tau_sink_%04d.txt'%args.demos,np.array(tau_list))
-np.savetxt('../../exps/perms_unique/acc_sink_%04d.txt'%args.demos,np.array(acc_list))
 np.savetxt('../../exps/perms_unique/precision_sink_%04d.txt'%args.demos,np.array(precision))

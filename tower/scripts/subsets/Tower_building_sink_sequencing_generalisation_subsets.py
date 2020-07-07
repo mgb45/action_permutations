@@ -20,7 +20,7 @@ random.seed(0)
 import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-from scipy.stats import kendalltau
+from scipy.optimize import linear_sum_assignment
 device = torch.device('cuda:0')
 
 # Set up pytorch dataloader
@@ -251,10 +251,9 @@ sn.noise_factor = 0.0
 sn.n_samples = 1
 
 print('Evaluating...')
-# Compare pair ranks
-tau_list = []
-Acc = []
-Precision = []
+
+obj_list = []
+gt = []
 for f in flist:
     run = int(f.split('_')[2][:-4])
     im = np.load('../../demos/perms_subsets/ims_%04d.npy'%run)
@@ -263,14 +262,10 @@ for f in flist:
 
     P = sn.predict_P(torch.from_numpy(im).float().to(device))
     order,stop = sn(torch.FloatTensor(np.arange(6).astype('float')).to(device),torch.from_numpy(im).float().to(device))
-    Acc.append(np.argmax(stop.cpu().detach().numpy(),1)==(seq.shape[0]-1))
-    obj_ids = np.argmax(P[0,:,:].cpu().detach().numpy(),1)
-
-    tau, _ = kendalltau(obj_ids[0:seq.shape[0]], seq)
-    tau_list.append(tau)
+    _,obj_ids = linear_sum_assignment(1-P[0,:,:].cpu().detach().numpy())
     
-    Precision.append(np.sum((obj_ids[0:seq.shape[0]]==seq))/(seq.shape[0]))
+    obj_list.append(obj_ids[0:seq.shape[0]])
+    gt.append(seq)
 
-np.savetxt('../../exps/perms_subsets/tau_sink_%04d.txt'%args.demos,np.array(tau_list))
-np.savetxt('../../exps/perms_subsets/Precision_sink_%04d.txt'%args.demos,np.array(Precision))
-np.savetxt('../../exps/perms_subsets/Acc_sink_%04d.txt'%args.demos,np.array(Acc))
+np.save('../../exps/perms_subsets/actions_sink_%04d.npy'%args.demos,np.array(obj_list))
+np.save('../../exps/perms_subsets/gt_actions_sink_%04d.npy'%args.demos,np.array(gt))

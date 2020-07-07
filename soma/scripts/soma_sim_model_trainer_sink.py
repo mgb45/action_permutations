@@ -201,7 +201,7 @@ class SinkhornNet(nn.Module):
 sn = SinkhornNet(latent_dim=1024, image_channels=12, K=7)
 sn.to(device)
 optimizer = torch.optim.Adam(sn.parameters(), lr=3e-4)
-n_epochs = 5000
+n_epochs = 1500
 losses = []
 
 

@@ -29,7 +29,7 @@ noise = 1.0
 temp = 1.0
 K = 6
 
-for numActions in list(range(min_actions,max_actions,action_step)):
+for numActions in list(range(min_actions,max_actions,action_step))[12:]:
 
     print('\nTesting for %d actions:'%numActions)
     train_actions = np.load('./data/actions_%02d.npy'%numActions,allow_pickle=True)
