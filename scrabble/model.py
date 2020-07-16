@@ -8,8 +8,32 @@ import torch.nn as nn
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torchvision.models as models
+from torch.nn.utils import weight_norm
 
 device = torch.device('cuda:1')
+
+
+class SamplerTCN(Dataset):
+    
+    def __init__(self, ims, actions, seq_lens):
+        
+        self.ims = torch.FloatTensor(ims.astype('float')).to(device)
+        self.actions = torch.LongTensor(actions.astype('int')).to(device)
+        self.seq_lens = torch.LongTensor(seq_lens.astype('int')).to(device)
+        
+        
+    def __len__(self):
+        
+        return self.ims.shape[0]
+    
+    def __getitem__(self, index):
+        
+        im = self.ims[index,:,:,:]
+        actions = self.actions[index,:]
+        seq_len = self.seq_lens[index]
+        return im, actions, seq_len
+    
+
 # Set up pytorch dataloader
 class Sampler(Dataset):
     
@@ -189,3 +213,110 @@ class SinkhornNet(nn.Module):
             log_alpha = log_alpha - (torch.logsumexp(log_alpha, dim=2, keepdim=True)).view(-1, n, 1)
             log_alpha = log_alpha - (torch.logsumexp(log_alpha, dim=1, keepdim=True)).view(-1, 1, n)
         return torch.exp(log_alpha)
+    
+
+class Chomp1d(nn.Module):
+    def __init__(self, chomp_size):
+        super(Chomp1d, self).__init__()
+        self.chomp_size = chomp_size
+
+    def forward(self, x):
+        return x[:, :, :-self.chomp_size].contiguous()
+
+
+class TemporalBlock(nn.Module):
+    def __init__(self, n_inputs, n_outputs, kernel_size, stride, dilation, padding, dropout=0.2):
+        super(TemporalBlock, self).__init__()
+        self.conv1 = weight_norm(nn.Conv1d(n_inputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation))
+        self.chomp1 = Chomp1d(padding)
+        self.relu1 = nn.ReLU()
+        self.dropout1 = nn.Dropout(dropout)
+
+        self.conv2 = weight_norm(nn.Conv1d(n_outputs, n_outputs, kernel_size,
+                                           stride=stride, padding=padding, dilation=dilation))
+        self.chomp2 = Chomp1d(padding)
+        self.relu2 = nn.ReLU()
+        self.dropout2 = nn.Dropout(dropout)
+
+        self.net = nn.Sequential(self.conv1, self.chomp1, self.relu1, self.dropout1,
+                                 self.conv2, self.chomp2, self.relu2, self.dropout2)
+        self.downsample = nn.Conv1d(n_inputs, n_outputs, 1) if n_inputs != n_outputs else None
+        self.relu = nn.ReLU()
+        self.init_weights()
+
+    def init_weights(self):
+        self.conv1.weight.data.normal_(0, 0.01)
+        self.conv2.weight.data.normal_(0, 0.01)
+        if self.downsample is not None:
+            self.downsample.weight.data.normal_(0, 0.01)
+
+    def forward(self, x):
+        out = self.net(x)
+        res = x if self.downsample is None else self.downsample(x)
+        return self.relu(out + res)
+
+
+class TemporalConvNet(nn.Module):
+    def __init__(self, num_inputs, num_channels, kernel_size=2, dropout=0.2):
+        super(TemporalConvNet, self).__init__()
+        layers = []
+        num_levels = len(num_channels)
+        for i in range(num_levels):
+            dilation_size = 2 ** i
+            in_channels = num_inputs if i == 0 else num_channels[i-1]
+            out_channels = num_channels[i]
+            layers += [TemporalBlock(in_channels, out_channels, kernel_size, stride=1, dilation=dilation_size,
+                                     padding=(kernel_size-1) * dilation_size, dropout=dropout)]
+
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x):
+        return self.network(x)
+
+class Flatten(nn.Module):
+    def forward(self, input):
+        return input.view(input.size(0), -1)
+
+class TCNNet(nn.Module):
+
+    def __init__(self, latent_dim=16, image_channels=3, K=6,l=6):
+        super(TCNNet, self).__init__()
+        
+        model = models.resnet18(pretrained=False)
+        model.fc = nn.Linear(512, latent_dim*l)
+        self.encoder = model
+        
+        self.tcn = TemporalConvNet(l,[K]*6)
+        
+        self.latent_dim = latent_dim
+        self.K = K
+        self.l = l
+        
+        self.criterion = nn.CrossEntropyLoss()
+
+        self.fc = nn.Sequential(
+                         nn.Linear(latent_dim, K))
+    
+    def forward(self, im):
+        
+        latent = self.encoder(im)
+        
+        stacked_latent = torch.reshape(latent,(-1,self.l,self.latent_dim))
+        
+        tc = self.tcn(stacked_latent)
+        
+        y = self.fc(tc)
+        logits = torch.nn.functional.softmax(y,dim=-1)
+        
+        
+        return logits
+    
+    def loss(self, seq, im):
+        
+        seq_logits = self.forward(im)
+        
+        recon = self.criterion(seq_logits.view(-1,self.K),seq.view(-1))
+
+        return recon, seq_logits
+
