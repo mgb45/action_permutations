@@ -2,7 +2,7 @@
 
 ## Model training and Data generation
 
-Soma puzzle disassembly experiments use a Coppeliasim environment. The notebook [soma_sim.ipynb](./soma_sim.ipynb) generates data for testing (images of the 240 soma puzzle configurations considered here). This notebook extracts soma puzzle solutions obtained using [polyform puzzler](http://puzzler.sourceforge.net/) from the [text file](./soma_cube.txt).
+Soma puzzle disassembly experiments use a Coppeliasim environment. The notebook [soma_sim.ipynb](./soma_sim.ipynb) generates data for testing (images of the 240 soma puzzle configurations considered here). This notebook extracts soma puzzle solutions (obtained using [polyform puzzler](http://puzzler.sourceforge.net/)) from this [text file](./soma_cube.txt).
 
 Manually definied ground truth extraction orders are in this [file](./data/extraction_order.txt).
 
