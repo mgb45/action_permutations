@@ -10,6 +10,7 @@ Manually definied ground truth extraction orders are in this [file](./data/extra
 
 - The notebook [soma_sim_model_trainer.ipynb](soma_sim_model_trainer.ipynb) trains an action sequencing model using a Sinkhorn network
 - The notebook [soma_sim_model_trainer_tcn.ipynb](soma_sim_model_trainer_tcn.ipynb) trains an action sequencing model using a TCN
+- The notebook [soma_sim_test.ipynb](soma_sim_test.ipynb) demos the block extraction
 
 ## Model trainging
 
