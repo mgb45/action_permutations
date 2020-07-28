@@ -4,7 +4,7 @@
 
 Soma puzzle disassembly experiments use a Coppeliasim environment. The notebook [soma_sim.ipynb](./soma_sim.ipynb) generates data for testing (images of the 240 soma puzzle configurations considered here). This notebook extracts soma puzzle solutions obtained using [polyform puzzler](http://puzzler.sourceforge.net/) from the [text file](./soma_cube.txt).
 
-Manually definied ground truth extraction orders are in this [file](../data/extraction_order.txt).
+Manually definied ground truth extraction orders are in this [file](./data/extraction_order.txt).
 
 - The notebook [soma_sim_model_trainer.ipynb](soma_sim_model_trainer.ipynb) trains an action sequencing model using a Sinkhorn network
 - The notebook [soma_sim_model_trainer_tcn.ipynb](soma_sim_model_trainer_tcn.ipynb) trains an action sequencing model using a TCN
