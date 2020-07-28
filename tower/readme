@@ -1,7 +1,0 @@
-# Tower building experiments
-
-- See notebooks folder for data generation (you will need to create a demos folder, and subfolders (perms,perms_unique,perms_subsets) to hold this)
-- See notebooks folder for simple model demos
-- See scripts folder for scripts to reproduce experiments
-- See exps folder for plotting notebooks to reproduce paper figures
-- See assets folder for Coppeliasim scenes
