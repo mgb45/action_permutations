@@ -6,7 +6,7 @@ Soma puzzle disassembly experiments use a Coppeliasim environment. The notebook 
 
 Manually definied ground truth extraction orders are in this [file](./data/extraction_order.txt).
 
-# Quick demos
+## Quick demos
 
 - The notebook [soma_sim_model_trainer.ipynb](soma_sim_model_trainer.ipynb) trains an action sequencing model using a Sinkhorn network
 - The notebook [soma_sim_model_trainer_tcn.ipynb](soma_sim_model_trainer_tcn.ipynb) trains an action sequencing model using a TCN
