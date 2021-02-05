@@ -1,5 +1,5 @@
 # Action Permutations
-Predicting action sequences with visual permutations
+Predicting action sequences with visual permutations (This code compliments the paper: *Burke, Subr and Ramamoorthy., Action sequencing using visual permutations, accepted at IEEE RA-L, 2021*. See [here](https://arxiv.org/abs/2008.01156) for pre-print)
 
 Requirements:
 - [PyRep](https://github.com/stepjam/PyRep) + [CoppeliaSim](https://www.coppeliarobotics.com/)
